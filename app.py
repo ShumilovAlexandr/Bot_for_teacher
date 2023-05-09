@@ -67,6 +67,26 @@ async def check_callback(callback: CallbackQuery, state: FSMContext):
 
 
 # Функционал бронирования времени урока.
+def check_time_format(time_str):
+    """Функция проверки корректности формата времени."""
+    try:
+        datetime.datetime.strptime(time_str, '%H:%M')
+        return True
+    except ValueError:
+        return False
+
+def check_time_range(time_str):
+    """Функция проверки корректнисти временного промежутка."""
+    start_time = datetime.datetime.strptime('10:00', '%H:%M').time()
+    end_time = datetime.datetime.strptime('20:00', '%H:%M').time()
+    time = datetime.datetime.strptime(time_str, '%H:%M').time()
+    if start_time < time <= end_time:
+        return True
+    return False
+
+def check_date_format(date_str):
+    pass
+
 @dp.message_handler(text =["Записаться на урок к учителю 🇬🇧"])
 async def check_date(message: Message, state: FSMContext):
     """
@@ -93,7 +113,16 @@ async def check_time(message: Message, state: FSMContext):
 
 @dp.message_handler(state=LessonData.time)
 async def check_name(message: Message, state: FSMContext):
+    """Функция для указания имени ученика."""
     await state.update_data(time=message.text)
+    time_str = (await state.get_data())['time']
+    if not check_time_format(time_str):
+        await bot.send_message(message.chat.id, 'Неверный формат времени. '
+                                                'Введите время в формате "чч:мм"')
+        return
+    if not check_time_range(time_str):
+        await bot.send_message(message.chat.id, 'Время должно быть в интервале между 10:00 и 20:00')
+        return
     await state.set_state(LessonData.name)
     await bot.send_message(message.chat.id, "И последний вопрос - как к Вам "
                                             "можно обращаться? Желательно, "

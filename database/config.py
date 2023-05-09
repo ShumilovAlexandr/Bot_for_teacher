@@ -57,10 +57,10 @@ def insert_into_table(date, time, fio, user_id):
         create_table('timesheet')
     # если есть, загружаем в нее данные нового ученика.
     else:
-        cur.execute('INSERT into timesheet '
-                    '(record_date,'
-                    'record_time, '
-                    'fio, user_id) values (%s, %s, %s, %s) ',
+        cur.execute("INSERT into timesheet "
+                    "(record_date,"
+                    "record_time, "
+                    "fio, user_id) values (%s, %s, %s, %s) ",
                     (date, time, fio, user_id))
         conn.commit()
         cur.close()
