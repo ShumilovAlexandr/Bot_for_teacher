@@ -16,6 +16,10 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
 from database.config import insert_into_table
+from validators import (check_time_range,
+                        check_time_format,
+                        check_date_format,
+                        check_date_range)
 
 
 load_dotenv()
@@ -67,26 +71,6 @@ async def check_callback(callback: CallbackQuery, state: FSMContext):
 
 
 # Функционал бронирования времени урока.
-def check_time_format(time_str):
-    """Функция проверки корректности формата времени."""
-    try:
-        datetime.datetime.strptime(time_str, '%H:%M')
-        return True
-    except ValueError:
-        return False
-
-def check_time_range(time_str):
-    """Функция проверки корректнисти временного промежутка."""
-    start_time = datetime.datetime.strptime('10:00', '%H:%M').time()
-    end_time = datetime.datetime.strptime('20:00', '%H:%M').time()
-    time = datetime.datetime.strptime(time_str, '%H:%M').time()
-    if start_time < time <= end_time:
-        return True
-    return False
-
-def check_date_format(date_str):
-    pass
-
 @dp.message_handler(text =["Записаться на урок к учителю 🇬🇧"])
 async def check_date(message: Message, state: FSMContext):
     """
@@ -97,7 +81,8 @@ async def check_date(message: Message, state: FSMContext):
     await bot.send_message(message.chat.id, "Пожалуйста, введите дату "
                                             "предполагаемого урока в "
                                             "формате год-месяц-день "
-                                            "(например, 2020-02-22): ")
+                                            "(например, 2020-02-22) "
+                                            "\U0001F4C5")
 
 @dp.message_handler(state=LessonData.date)
 async def check_time(message: Message, state: FSMContext):
@@ -106,23 +91,55 @@ async def check_time(message: Message, state: FSMContext):
     даты).
     """
     await state.update_data(date=message.text)
+    date_str = (await state.get_data())['date']
+    # Проверяем, что дата введена в нужном формате
+    if not check_date_format(date_str):
+        await bot.send_message(message.chat.id, "\U00002757 Неверный формат "
+                                                "даты. Дата урока должна указываться "
+                                                "в формате год-месяц-день ("
+                                                "цифрами) \U00002757")
+        return
+    # ... и в нужном диапазоне
+    if not check_date_range(date_str):
+        await bot.send_message(message.chat.id, "Задана несуществующая дата, или в сообщении "
+                                                "ошибка. Попробуй еще раз "
+                                                "\U0001F60C")
+        return
+    # ... и естественно заранее
+    if date_str <= str(datetime.datetime.now()):
+        await bot.send_message(message.chat.id, "Дату урока и время надо "
+                                                "бронировать "
+                                                "заблаговременно. Задним "
+                                                "и сегодняшним числом это "
+                                                "сделать не получится "
+                                                "\U0000263A")
+        return
+    # Если дата введена правильно, то...
     await state.set_state(LessonData.time)
     await bot.send_message(message.chat.id, "Теперь укажите, во сколько будет "
                                             "проведен Ваш урок по МСК "
-                                            "(например, 14:00)")
+                                            "(например, 14:00) \U000023F0")
 
 @dp.message_handler(state=LessonData.time)
 async def check_name(message: Message, state: FSMContext):
     """Функция для указания имени ученика."""
     await state.update_data(time=message.text)
     time_str = (await state.get_data())['time']
+    # Проверяем, что время введено в нужно формате
     if not check_time_format(time_str):
-        await bot.send_message(message.chat.id, 'Неверный формат времени. '
-                                                'Введите время в формате "чч:мм"')
+        await bot.send_message(message.chat.id, "\U00002757 Неверный "
+                                                "формат времени. Введите "
+                                                "время в формате "
+                                                "'чч:мм' \U00002757")
         return
+    # ... и в нужном диапазоне
     if not check_time_range(time_str):
-        await bot.send_message(message.chat.id, 'Время должно быть в интервале между 10:00 и 20:00')
+        await bot.send_message(message.chat.id, "Время должно быть в интервале "
+                                                "между 10:00 и 20:00. "
+                                                "Преподавателю тоже нужен "
+                                                "отдых \U0001F60C")
         return
+    # Если вводимое время прошло проверку на формат и на диапазон
     await state.set_state(LessonData.name)
     await bot.send_message(message.chat.id, "И последний вопрос - как к Вам "
                                             "можно обращаться? Желательно, "
@@ -131,6 +148,10 @@ async def check_name(message: Message, state: FSMContext):
 
 @dp.message_handler(state=LessonData.name)
 async def show_result(message: Message, state: FSMContext):
+    """
+    Функция выводит результирующее сообщение и сохраняет ученика в базу
+    данных.
+    """
     await state.update_data(name=message.text)
     date = (await state.get_data())['date']
     time = (await state.get_data())['time']
@@ -139,11 +160,9 @@ async def show_result(message: Message, state: FSMContext):
                                             f"{date} на {time} на проведение "
                                             f"урока английского языка. Учитель свяжется с "
                                             f"Вами заранее до проведения урока. Успехов Вам! 🇬🇧 🇬🇧 🇬🇧")
-    insert_into_table(date, time, name, message.from_user.id)
+    # insert_into_table(date, time, name, message.from_user.id)
 
 
-
-# TODO Функционал отмены запланированного занятия
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
