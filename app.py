@@ -15,7 +15,8 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from dotenv import load_dotenv
 
-from database.config import insert_into_table
+from database.config import (insert_into_table,
+                             check_records)
 from validators import (check_time_range,
                         check_time_format,
                         check_date_format,
@@ -30,7 +31,8 @@ bot = Bot(os.getenv("TOKEN"))
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 
-# Используется для хранения состояния набора данных пользователя.
+# Используется для хранения состояния набора данных пользователя при записи
+# на урок.
 class LessonData(StatesGroup):
     date = State()
     time = State()
@@ -69,8 +71,7 @@ async def check_callback(callback: CallbackQuery, state: FSMContext):
         case "button3":
             pass
 
-
-# Функционал бронирования времени урока.
+### Функционал бронирования времени урока. ###
 @dp.message_handler(text =["Записаться на урок к учителю 🇬🇧"])
 async def check_date(message: Message, state: FSMContext):
     """
@@ -124,7 +125,9 @@ async def check_time(message: Message, state: FSMContext):
 async def check_name(message: Message, state: FSMContext):
     """Функция для указания имени ученика."""
     await state.update_data(time=message.text)
+    date_str = (await state.get_data())['date']
     time_str = (await state.get_data())['time']
+
     # Проверяем, что время введено в нужно формате
     if not check_time_format(time_str):
         await bot.send_message(message.chat.id, "\U00002757 Неверный "
@@ -132,14 +135,26 @@ async def check_name(message: Message, state: FSMContext):
                                                 "время в формате "
                                                 "'чч:мм' \U00002757")
         return
+
     # ... и в нужном диапазоне
     if not check_time_range(time_str):
         await bot.send_message(message.chat.id, "Время должно быть в интервале "
-                                                "между 10:00 и 20:00. "
+                                                "между 10:00 и 20:00 с шагом в 1 час. "
                                                 "Преподавателю тоже нужен "
                                                 "отдых \U0001F60C")
         return
-    # Если вводимое время прошло проверку на формат и на диапазон
+
+    # Проверка, что выбранное время и дата еще не заняты
+    if check_records(date_str, time_str):
+        await bot.send_message(message.chat.id,
+                               f"Извините, но время {time_str} "
+                               f"\U000023F0 на {date_str} \U0001F4C5 "
+                               f"уже занято. "
+                               f"Пожалуйста, выберите другое время.")
+        return
+
+    # Если вводимое время прошло проверку на формат и на диапазон, задаем
+    # последний вопрос
     await state.set_state(LessonData.name)
     await bot.send_message(message.chat.id, "И последний вопрос - как к Вам "
                                             "можно обращаться? Желательно, "
@@ -156,12 +171,18 @@ async def show_result(message: Message, state: FSMContext):
     date = (await state.get_data())['date']
     time = (await state.get_data())['time']
     name = (await state.get_data())['name']
-    await bot.send_message(message.chat.id, f"Итак, {name}, Вы записались "
-                                            f"{date} на {time} на проведение "
-                                            f"урока английского языка. Учитель свяжется с "
-                                            f"Вами заранее до проведения урока. Успехов Вам! 🇬🇧 🇬🇧 🇬🇧")
-    # insert_into_table(date, time, name, message.from_user.id)
 
+    # Финальное сообщение, подтвержающее бронь.
+    await bot.send_message(message.chat.id,
+                           f"Итак, {name}, Вы записались "
+                           f"{date} на {time} на проведение "
+                           f"урока английского языка. Учитель свяжется с "
+                           f"Вами заранее до проведения урока. Успехов Вам! "
+                           f"🇬🇧 🇬🇧 🇬🇧")
+    # Сохранение данных ученика в БД.
+    insert_into_table(date, time, name, message.from_user.id)
+    await state.reset_state()
+    await start(message)
 
 
 if __name__ == "__main__":

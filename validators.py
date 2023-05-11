@@ -11,10 +11,10 @@ def check_time_format(time_str):
 
 def check_time_range(time_str):
     """Функция проверки корректности временного промежутка."""
-    start_time = datetime.datetime.strptime('10:00', '%H:%M').time()
+    start_time = datetime.datetime.strptime('09:00', '%H:%M').time()
     end_time = datetime.datetime.strptime('19:00', '%H:%M').time()
     time = datetime.datetime.strptime(time_str, '%H:%M').time()
-    if start_time < time <= end_time:
+    if start_time < time <= end_time and time.minute == 0:
         return True
     return False
 
