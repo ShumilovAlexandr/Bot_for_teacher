@@ -12,15 +12,17 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import (State,
                                               StatesGroup)
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from sqlalchemy import insert
 
 from dotenv import load_dotenv
 
-from database.config import (insert_into_table,
-                             check_records)
+from database.databases import Session
 from validators import (check_time_range,
                         check_time_format,
                         check_date_format,
                         check_date_range)
+from database.tables import timesheet
+from database.database_query import check_records
 
 
 load_dotenv()
@@ -30,6 +32,7 @@ bot = Bot(os.getenv("TOKEN"))
 # Объект диспетчера
 dp = Dispatcher(bot, storage=MemoryStorage())
 
+session = Session()
 
 # Используется для хранения состояния набора данных пользователя при записи
 # на урок.
@@ -37,6 +40,12 @@ class LessonData(StatesGroup):
     date = State()
     time = State()
     name = State()
+
+# спользуется для хранения состояния набора данных пользователя при отмене
+# забронированого урока.
+class CancelLesson(StatesGroup):
+    date_lsn = State()
+    time_lsn = State()
 
 
 @dp.message_handler(commands=['start'])
@@ -67,7 +76,7 @@ async def check_callback(callback: CallbackQuery, state: FSMContext):
         case "button1":
             await check_date(callback.message, state=state)
         case "button2":
-            pass
+            await select_lesson(callback.message, state=state)
         case "button3":
             pass
 
@@ -179,10 +188,54 @@ async def show_result(message: Message, state: FSMContext):
                            f"урока английского языка. Учитель свяжется с "
                            f"Вами заранее до проведения урока. Успехов Вам! "
                            f"🇬🇧 🇬🇧 🇬🇧")
+    # Коллекция данных для сохранения в базу данных
+    data = {
+        'record_date': date,
+        'record_time': time,
+        'fio': name,
+        'user_id': message.from_user.id
+    }
     # Сохранение данных ученика в БД.
-    insert_into_table(date, time, name, message.from_user.id)
+    stmt = insert(timesheet).values(data)
+    session.execute(stmt)
+    session.commit()
+
+    # Сбрасываем состояние выбора пользователем.
     await state.reset_state()
+    # Запускаем снова стартовый выбор кнопок.
     await start(message)
+
+
+
+
+
+
+
+
+# Функционал отмены забронированного урока.
+# TODO в зависимости от пользователя, данный функционал должен выводить
+#  пользователю на выбор список кнопок, где указывались бы даты с
+#  забронированными уроками. Далее, после выбора даты, предлагается список
+#  забронированного времени. С запросом к БД какая-то беда
+@dp.message_handler(text=["Отменить запланированный урок ❌"])
+async def select_lesson(message: Message, state: FSMContext):
+    """
+    Функция, отвечающая за вывод дат, в которые настоящий
+    пользователь забронировал себе уроки.
+    """
+    await state.set_state(CancelLesson.date_lsn)
+    lesson = session.query(timesheet).filter(timesheet.record_date)
+    markup = InlineKeyboardMarkup(row_width=3)
+    for less in lesson:
+        buttons = InlineKeyboardButton(text=str(less), callback_data =
+        f'{less}')
+        markup.add(buttons)
+    await bot.send_message(message.chat.id, "Жаль конечно \U0001F61E. " 
+                                            "Надеюсь, Вы просто решили "
+                                            "перенести время. Выбери, в какой день "
+                                            "Вы хотите отменить урок "
+                                            "\U0001F4C5",
+                           reply_markup=markup)
 
 
 if __name__ == "__main__":
