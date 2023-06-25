@@ -1,5 +1,9 @@
 from .databases import get_connection
 
+def establish_connection():
+    conn = get_connection()
+    cur = conn.cursor()
+    return cur
 
 def check_records(date, time):
     """
@@ -10,11 +14,9 @@ def check_records(date, time):
     :return: возвращает True, если в таблице timesheet имеется запись,
     или False, если запись отсутствует
     """
-    conn = get_connection()
-    cur = conn.cursor()
+    cur = establish_connection()
     cur.execute(f"SELECT EXISTS (SELECT 1 from timesheet where "
                 f"record_date='{date}' and record_time='{time}')")
     table_check = cur.fetchone()[0]
     cur.close()
-    conn.close()
     return table_check

@@ -1,3 +1,4 @@
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import (Table,
                         MetaData,
                         Column,
@@ -5,13 +6,13 @@ from sqlalchemy import (Table,
                         String,
                         DateTime, TIME)
 
-metadata = MetaData()
+Base = declarative_base()
 
-timesheet = Table(
-    'timesheet',
-    metadata,
-    Column('record_date', DateTime),
-    Column('record_time', TIME),
-    Column('fio', String),
-    Column('user_id', Integer, primary_key=True, unique=True)
-)
+
+class Timesheet(Base):
+    __tablename__ = 'timesheet'
+
+    record_date = Column(DateTime)
+    record_time = Column(TIME)
+    fio = Column(String)
+    user_id = Column(Integer, primary_key=True, unique=True)

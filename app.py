@@ -1,5 +1,6 @@
 import datetime
 import os
+import json
 
 from aiogram import (Bot,
                      Dispatcher,
@@ -9,20 +10,19 @@ from aiogram.types import (InlineKeyboardMarkup,
                            CallbackQuery,
                            Message)
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import (State,
-                                              StatesGroup)
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from sqlalchemy import insert
-
 from dotenv import load_dotenv
 
 from database.databases import Session
-from validators import (check_time_range,
-                        check_time_format,
-                        check_date_format,
-                        check_date_range)
-from database.tables import timesheet
+from utils.validators import (check_time_range,
+                              check_time_format,
+                              check_date_format,
+                              check_date_range)
+from database.tables import Timesheet
 from database.database_query import check_records
+from utils.states import (LessonData,
+                           CancelLesson)
 
 
 load_dotenv()
@@ -33,19 +33,6 @@ bot = Bot(os.getenv("TOKEN"))
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 session = Session()
-
-# Используется для хранения состояния набора данных пользователя при записи
-# на урок.
-class LessonData(StatesGroup):
-    date = State()
-    time = State()
-    name = State()
-
-# спользуется для хранения состояния набора данных пользователя при отмене
-# забронированого урока.
-class CancelLesson(StatesGroup):
-    date_lsn = State()
-    time_lsn = State()
 
 
 @dp.message_handler(commands=['start'])
@@ -196,7 +183,7 @@ async def show_result(message: Message, state: FSMContext):
         'user_id': message.from_user.id
     }
     # Сохранение данных ученика в БД.
-    stmt = insert(timesheet).values(data)
+    stmt = insert(Timesheet).values(data)
     session.execute(stmt)
     session.commit()
 
@@ -205,37 +192,97 @@ async def show_result(message: Message, state: FSMContext):
     # Запускаем снова стартовый выбор кнопок.
     await start(message)
 
-
-
-
-
-
-
-
-# Функционал отмены забронированного урока.
-# TODO в зависимости от пользователя, данный функционал должен выводить
-#  пользователю на выбор список кнопок, где указывались бы даты с
-#  забронированными уроками. Далее, после выбора даты, предлагается список
-#  забронированного времени. С запросом к БД какая-то беда
+### Функционал отмены забронированного урока. ###
 @dp.message_handler(text=["Отменить запланированный урок ❌"])
 async def select_lesson(message: Message, state: FSMContext):
     """
     Функция, отвечающая за вывод дат, в которые настоящий
     пользователь забронировал себе уроки.
     """
-    await state.set_state(CancelLesson.date_lsn)
-    lesson = session.query(timesheet).filter(timesheet.record_date)
-    markup = InlineKeyboardMarkup(row_width=3)
-    for less in lesson:
-        buttons = InlineKeyboardButton(text=str(less), callback_data =
-        f'{less}')
+    lesson = session\
+        .query(Timesheet.record_date)\
+        .filter(Timesheet.user_id == message.chat.id)\
+        .all()
+
+    # Необходимо отформатировать выводимую из БД информацию
+    formatted_dates = [date[0].strftime('%Y-%m-%d') for date in lesson]
+    markup = InlineKeyboardMarkup(row_width=1)
+
+    # Создаем кнопки с датами.
+    for less in formatted_dates:
+        buttons = InlineKeyboardButton(text=str(less),
+                                       callback_data = f'{less}')
         markup.add(buttons)
-    await bot.send_message(message.chat.id, "Жаль конечно \U0001F61E. " 
+
+    # Сохраняем состояние действия пользователя.
+    await state.set_state(CancelLesson.date_lsn)
+    await bot.send_message(message.chat.id, "Жаль конечно \U0001F61E. "
                                             "Надеюсь, Вы просто решили "
                                             "перенести время. Выбери, в какой день "
                                             "Вы хотите отменить урок "
-                                            "\U0001F4C5",
-                           reply_markup=markup)
+                                            "\U0001F4C5", reply_markup=markup)
+
+@dp.callback_query_handler(lambda callback: True, state=CancelLesson.date_lsn)
+async def select_time(callback: CallbackQuery, state: \
+    FSMContext):
+    """
+    Функция, отвечающая за вывод времени применимо к дате, в которые настоящий
+    пользователь забронировал себе уроки.
+    """
+    await state.update_data(date_lsn=callback.data)
+    time_lesson = session \
+        .query(Timesheet.record_time) \
+        .filter(Timesheet.record_date == callback.data) \
+        .all()
+    markup = InlineKeyboardMarkup(row_width=1)
+
+    formatted_times = [time[0].strftime("%H:%M") for time in time_lesson]
+    # Создаем кнопки со временем на забронированные даты.
+    for time in formatted_times:
+        buttons = InlineKeyboardButton(text=str(time),
+                                       callback_data=f'{time}')
+        markup.add(buttons)
+
+    # Сохраняем состояние действия пользователя.
+    await state.set_state(CancelLesson.time_lsn)
+    await callback.message.answer(text="Теперь, выберите время, "
+                                       "на которое у Вас забронирован "
+                                       f"урок",
+                                  reply_markup=markup)
+
+
+
+
+@dp.callback_query_handler(lambda callback: True, state=CancelLesson.time_lsn)
+async def select_time(callback: CallbackQuery, state: \
+                      FSMContext):
+    """
+    Функция, отвечающая за удаление урока из базы данных.
+    """
+    await state.update_data(time_lsn=callback.data)
+    data = await  state.get_data()
+    date = data['date_lsn']
+    time = data['time_lsn']
+    await callback.message.answer(text=f"Запись {date} на {time} отменена. "
+                                       f"Будем рады Вас видеть у меня на "
+                                       f"занятии! Возвращайтесь😍😍😍")
+    stmt = session\
+        .query(Timesheet) \
+        .filter(Timesheet.record_date == date)\
+        .filter(Timesheet.record_time == time)\
+        .delete()
+    session.commit()
+    # Сбрасываем состояние отмены урока.
+    await state.reset_state()
+
+
+# TODO добавить кнопку, чтобы после завершения отмены урока, снова выводить
+#  стартовое сообщение и набор кнопок.
+# TODO Добавить теперь проверку, что если нет забронированных уроков,
+#  при попытке отмены - выводить сообщение, что Вами не забронирован не один
+#  урок.
+# TODO также, разобраться, почему долго светятся кнопки.
+# TODO и еще, проверку, чтобы не записываться больше чем на месяц вперед.
 
 
 if __name__ == "__main__":
