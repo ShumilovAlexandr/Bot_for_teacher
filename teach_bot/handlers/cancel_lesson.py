@@ -27,19 +27,26 @@ async def select_lesson(message: Message, state: FSMContext):
     formatted_dates = [date[0].strftime('%Y-%m-%d') for date in lesson]
     markup = InlineKeyboardMarkup(row_width=1)
 
-    # Создаем кнопки с датами.
-    for less in formatted_dates:
-        buttons = InlineKeyboardButton(text=str(less),
-                                       callback_data = f'{less}')
-        markup.add(buttons)
 
-    # Сохраняем состояние действия пользователя.
-    await state.set_state(CancelLesson.date_lsn)
-    await bot.send_message(message.chat.id, "Жаль конечно \U0001F61E. "
-                                            "Надеюсь, Вы просто решили "
-                                            "перенести время. Выбери, в какой день "
-                                            "Вы хотите отменить урок "
-                                            "\U0001F4C5", reply_markup=markup)
+    if formatted_dates:
+        # Создаем кнопки с датами.
+        for less in formatted_dates:
+            buttons = InlineKeyboardButton(text=str(less),
+                                           callback_data = f'{less}')
+            markup.add(buttons)
+            # Сохраняем состояние действия пользователя.
+            await state.set_state(CancelLesson.date_lsn)
+            await bot.send_message(message.chat.id, "Жаль конечно \U0001F61E. "
+                                                    "Надеюсь, Вы просто решили "
+                                                    "перенести время. Выбери, в какой день "
+                                                    "Вы хотите отменить урок "
+                                                    "\U0001F4C5",
+                                   reply_markup=markup)
+    else:
+        await bot.send_message(message.chat.id, "У Вас нет забронированных "
+                                                "уроков, отменять нечего!")
+        await state.reset_state()
+
 
 @dp.callback_query_handler(lambda callback: True, state=CancelLesson.date_lsn)
 async def select_time(callback: CallbackQuery, state: \
@@ -80,7 +87,7 @@ async def select_time(callback: CallbackQuery, state: \
     date = data['date_lsn']
     time = data['time_lsn']
     await callback.message.answer(text=f"Запись {date} на {time} отменена. "
-                                       f"Будем рады Вас видеть у меня на "
+                                       f"Буду рады Вас видеть у меня на "
                                        f"занятии! Возвращайтесь😍😍😍")
     stmt = session\
         .query(Timesheet) \
@@ -90,12 +97,3 @@ async def select_time(callback: CallbackQuery, state: \
     session.commit()
     # Сбрасываем состояние отмены урока.
     await state.reset_state()
-
-
-# TODO добавить кнопку, чтобы после завершения отмены урока, снова выводить
-#  стартовое сообщение и набор кнопок.
-# TODO Добавить теперь проверку, что если нет забронированных уроков,
-#  при попытке отмены - выводить сообщение, что Вами не забронирован не один
-#  урок.
-# TODO также, разобраться, почему долго светятся кнопки.
-# TODO и еще, проверку, чтобы не записываться больше чем на месяц вперед.

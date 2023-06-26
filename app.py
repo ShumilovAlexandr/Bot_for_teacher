@@ -1,5 +1,3 @@
-import bot
-
 from aiogram import executor
 from aiogram.types import (InlineKeyboardMarkup,
                            InlineKeyboardButton,
@@ -8,9 +6,9 @@ from aiogram.types import (InlineKeyboardMarkup,
 from aiogram.dispatcher import FSMContext
 
 
-from bot.loader import dp
-from bot.handlers.add_user import check_date
-from bot.handlers.cancel_lesson import select_lesson
+from teach_bot.loader import dp
+from teach_bot.handlers.add_user import check_date
+from teach_bot.handlers.cancel_lesson import select_lesson
 
 
 
@@ -53,3 +51,10 @@ async def check_callback(callback: CallbackQuery, state: FSMContext):
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
 
+
+# TODO также, разобраться, почему долго светятся кнопки.
+# TODO и еще, проверку, чтобы не записываться больше чем на месяц вперед.
+# TODO надо организовать, чтобы на любом этапе, когда пользователь нажмет на
+#  \start, происходил вызов базового меню, а не когда все это добро
+#  отработает. Частично при регистрации сделал, но чет как то криво. Надо
+#  пересмотреть.
