@@ -18,6 +18,7 @@ engine = create_engine(DATABASE_URL)
 Session = sessionmaker(engine,
                        autocommit=False,
                        autoflush=False)
+session = Session()
 
 def get_session():
     session = Session()
