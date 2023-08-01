@@ -5,18 +5,26 @@ def establish_connection():
     cur = conn.cursor()
     return cur
 
-def check_records(date, time):
+def check_records(date):
     """
-    Функция нужна для проверки наличия загружаемых в таблицу БД записей.
+    Функция выводит записи из базы данных, а именно время для
+    конкретной даты.
 
-    :param date: дата проведения урока
-    :param time: время проведения урока.
-    :return: возвращает True, если в таблице timesheet имеется запись,
-    или False, если запись отсутствует
+    :param date: дата проведения урока (тип данных - datetime.date)
+    :return: список доступных временных слотов
     """
     cur = establish_connection()
-    cur.execute(f"SELECT EXISTS (SELECT 1 from timesheet where "
-                f"record_date='{date}' and record_time='{time}')")
-    table_check = cur.fetchone()[0]
+    cur.execute(f"SELECT lesson_time FROM timelist WHERE lesson_time NOT IN "
+                f"(SELECT record_time FROM timesheet WHERE "
+                f"record_date = '{date}') ORDER BY lesson_time")
+    available_times = [str(row[0]) for row in cur.fetchall()]
     cur.close()
-    return table_check
+    return available_times
+
+
+
+
+# select lesson_time from timelist except
+# select record_time from timesheet
+# where record_date = '2023-08-03'
+# order by lesson_time

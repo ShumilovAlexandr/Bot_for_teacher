@@ -11,7 +11,7 @@ from ..loader import (dp,
                       bot)
 
 
-### Функционал отмены забронированного урока. ###
+### Функционал отмены забронированного урока.
 @dp.message_handler(text=["Отменить запланированный урок ❌"])
 async def select_lesson(message: Message, state: FSMContext):
     """

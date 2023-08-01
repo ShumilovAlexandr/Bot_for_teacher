@@ -1,144 +1,109 @@
 import datetime
+import json
 
 from aiogram.dispatcher import FSMContext
-from aiogram.types import (InlineKeyboardMarkup,
+from aiogram.types import (Message,
                            InlineKeyboardButton,
-                           CallbackQuery,
-                           Message)
-from sqlalchemy import insert
+                           InlineKeyboardMarkup,
+                           CallbackQuery)
+from aiogram_calendar import (SimpleCalendar,
+                              simple_cal_callback)
+from sqlalchemy import (insert,
+                        select)
 
 from teach_bot.utils.states import LessonData
 from ..loader import (dp,
                       bot)
-from ..utils.validators import (check_time_range,
-                                check_time_format,
-                                check_date_format,
-                                check_date_range)
 from ..database.database_query import check_records
 from ..database.databases import session
-from ..database.tables import Timesheet
+from ..database.tables import (Timesheet,
+                               Timelist)
 
 
-### Функционал бронирования времени урока. ###
 @dp.message_handler(text =["Записаться на урок к учителю 🇬🇧"])
-async def check_date(message: Message, state: FSMContext):
-    """
-    Функция для указания даты предполагаемого урока (без указания
-    времени).
-    """
-    await state.set_state(LessonData.date)
-    await bot.send_message(message.chat.id, "Пожалуйста, введите дату "
-                                            "предполагаемого урока в "
-                                            "формате год-месяц-день "
-                                            "(например, 2020-02-22) "
-                                            "\U0001F4C5")
+async def show_start_message(message: Message, state: FSMContext):
+    """Функция для вывода календаря."""
+    await message.answer(text="Пожалуйста, выберите дату "
+                              "предполагаемого урока в "
+                              "\U0001F4C5",
+                         reply_markup=await SimpleCalendar().start_calendar())
+    await state.set_state(LessonData.date_lesson)
 
-@dp.message_handler(state=LessonData.date)
-async def check_time(message: Message, state: FSMContext):
+
+@dp.callback_query_handler(simple_cal_callback.filter(),
+                           state=LessonData.date_lesson)
+async def select_date(callback_query: CallbackQuery,
+                      callback_data: dict,
+                      state: FSMContext):
     """
-    Функция для указания времени предполагаемого урока (без указания
+    Функция, где пользователь после выбора даты сохраняет свой выбор в машине
+    состояния. Также, тут предлагается на выбор время урока.
+    """
+    selected, date = await SimpleCalendar().process_selection(
+        callback_query, callback_data)
+    if selected:
+        # Проверка корректности введенного времени
+        # (выбранная дата не задним числом).
+        da = callback_data["year"]+'-'+callback_data["month"]+'-'+callback_data["day"]
+        res = datetime.datetime.strptime(da, '%Y-%m-%d')
+        # Проверяем приведенную строку с датой относительно текущей даты.
+        if str(res) <= str(datetime.datetime.now()):
+
+            # Если выбрана дата "задним" числом или текущая, посылаем в чат
+            # соответствующее сообщение и выводим снова клавиатуру.
+            await bot.send_message(callback_query.message.chat.id,
+                                   "Дату урока и время надо бронировать заблаговременно. "
+                                   "Задним и сегодняшним числом это сделать "
+                                   "не получится \U0000263A",
+                                   reply_markup=await SimpleCalendar().start_calendar())
+            return
+        else:
+            # Проверка наличия свободных временных слотов на выбранную дату.
+            available_times = check_records(res.date())
+            if not available_times:
+                await bot.send_message(text="На выбранную дату нет "
+                                              "свободных временных слотов. Выберите другую "
+                                              "дату.",
+                                       chat_id=callback_query.message.chat.id,
+                                       reply_markup=await SimpleCalendar().start_calendar())
+                return
+            # Выводим кнопки с свободным временем.
+            markup = InlineKeyboardMarkup()
+            for time_slot in available_times:
+                button = InlineKeyboardButton(text=time_slot,
+                                              callback_data=f"{time_slot}")
+                markup.add(button)
+            await callback_query.\
+                message.\
+                answer("Окей, вы решили забронировать урок "
+                       f"{date.strftime('%Y-%m-%d')}. Давайте теперь определимся "
+                       "со временем \U000023F0", reply_markup=markup)
+            await state.update_data(date_lesson=res)
+            await state.set_state(LessonData.time)
+
+
+@dp.callback_query_handler(state=LessonData.time)
+async def select_time(callback_query: CallbackQuery, state: FSMContext):
+    """
+    Функция для выбора времени предполагаемого урока (без указания
     даты).
     """
-    if message.text == "/start":
-        await state.reset_state()
-    else:
-        await state.update_data(date=message.text)
-        date_str = (await state.get_data())['date']
-        # Проверяем, что дата введена в нужном формате
-        if not check_date_format(date_str):
-            await bot.send_message(message.chat.id, "\U00002757 Неверный формат "
-                                                    "даты. Дата урока должна указываться "
-                                                    "в формате год-месяц-день ("
-                                                    "цифрами) \U00002757")
-            return
-        # ... и в нужном диапазоне
-        if not check_date_range(date_str):
-            await bot.send_message(message.chat.id, "Задана несуществующая дата, или в сообщении "
-                                                    "ошибка. Попробуй еще раз "
-                                                    "\U0001F60C")
-            return
-        # ... и естественно заранее
-        if date_str <= str(datetime.datetime.now()):
-            await bot.send_message(message.chat.id, "Дату урока и время надо "
-                                                    "бронировать "
-                                                    "заблаговременно. Задним "
-                                                    "и сегодняшним числом это "
-                                                    "сделать не получится "
-                                                    "\U0000263A")
-            return
-        # Если дата введена правильно, то...
-        await state.set_state(LessonData.time)
-        await bot.send_message(message.chat.id, "Теперь укажите, во сколько будет "
-                                                "проведен Ваш урок по МСК "
-                                                "(например, 14:00) \U000023F0")
-
-@dp.message_handler(state=LessonData.time)
-async def check_name(message: Message, state: FSMContext):
-    """Функция для указания имени ученика."""
-    if message.text == "/start":
-        await state.reset_state()
-    else:
-        await state.update_data(time=message.text)
-        date_str = (await state.get_data())['date']
-        time_str = (await state.get_data())['time']
-
-        # Проверяем, что время введено в нужно формате
-        if not check_time_format(time_str):
-            await bot.send_message(message.chat.id, "\U00002757 Неверный "
-                                                    "формат времени. Введите "
-                                                    "время в формате "
-                                                    "'чч:мм' \U00002757")
-            return
-
-        # ... и в нужном диапазоне
-        if not check_time_range(time_str):
-            await bot.send_message(message.chat.id, "Время должно быть в интервале "
-                                                    "между 10:00 и 20:00 с шагом в 1 час. "
-                                                    "Преподавателю тоже нужен "
-                                                    "отдых \U0001F60C")
-            return
-
-        # Проверка, что выбранное время и дата еще не заняты
-        if check_records(date_str, time_str):
-            await bot.send_message(message.chat.id,
-                                   f"Извините, но время {time_str} "
-                                   f"\U000023F0 на {date_str} \U0001F4C5 "
-                                   f"уже занято. "
-                                   f"Пожалуйста, выберите другое время.")
-            return
-
-        # Если вводимое время прошло проверку на формат и на диапазон, задаем
-        # последний вопрос
-        await state.set_state(LessonData.name)
-        await bot.send_message(message.chat.id, "И последний вопрос - как к Вам "
-                                                "можно обращаться? Желательно, "
-                                                "если укажите имя и фамилию "
-                                                "\U0001F609")
-
-@dp.message_handler(state=LessonData.name)
-async def show_result(message: Message, state: FSMContext):
-    """
-    Функция выводит результирующее сообщение и сохраняет ученика в базу
-    данных.
-    """
-    await state.update_data(name=message.text)
-    date = (await state.get_data())['date']
-    time = (await state.get_data())['time']
-    name = (await state.get_data())['name']
+    date = (await state.get_data())['date_lesson']
+    first_name = callback_query.from_user.first_name
+    second_name = callback_query.from_user.last_name
 
     # Финальное сообщение, подтвержающее бронь.
-    await bot.send_message(message.chat.id,
-                           f"Итак, {name}, Вы записались "
-                           f"{date} на {time} на проведение "
-                           f"урока английского языка. Учитель свяжется с "
-                           f"Вами заранее до проведения урока. Успехов Вам! "
-                           f"🇬🇧 🇬🇧 🇬🇧")
+    await callback_query.message.answer(f"Итак, {first_name} {second_name}, Вы записались "
+                           f"{date.date()} в {callback_query.data} на проведение "
+                           "урока английского языка. Учитель свяжется с Вами заранее "
+                           "до проведения урока. Успехов Вам! 🇬🇧 🇬🇧 🇬🇧")
+
     # Коллекция данных для сохранения в базу данных
     data = {
-        'record_date': date,
-        'record_time': time,
-        'fio': name,
-        'user_id': message.from_user.id
+        'record_date': date.date(),
+        'record_time': callback_query.data,
+        'fio': first_name + " " + second_name,
+        'user_id': callback_query.from_user.id
     }
     # Сохранение данных ученика в БД.
     stmt = insert(Timesheet).values(data)

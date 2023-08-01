@@ -7,7 +7,7 @@ from aiogram.dispatcher import FSMContext
 
 
 from teach_bot.loader import dp
-from teach_bot.handlers.add_user import check_date
+from teach_bot.handlers.add_user import show_start_message
 from teach_bot.handlers.cancel_lesson import select_lesson
 
 
@@ -38,23 +38,17 @@ async def check_callback(callback: CallbackQuery, state: FSMContext):
     """Обработка результата нажатия той или иной кнопки."""
     match callback.data:
         case "button1":
-            await check_date(callback.message, state=state)
+            await show_start_message(callback.message, state=state)
         case "button2":
             await select_lesson(callback.message, state=state)
         case "button3":
             pass
 
 
-
-
-
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
 
 
-# TODO также, разобраться, почему долго светятся кнопки.
-# TODO и еще, проверку, чтобы не записываться больше чем на месяц вперед.
-# TODO надо организовать, чтобы на любом этапе, когда пользователь нажмет на
-#  \start, происходил вызов базового меню, а не когда все это добро
-#  отработает. Частично при регистрации сделал, но чет как то криво. Надо
-#  пересмотреть.
+# TODO порешать с записью пользователя в базу данных и выбор времени. Плюс,
+#  добавить функционал начать занова при вводе соответствующей команды и
+#  сбросе состояния.
