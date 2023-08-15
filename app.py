@@ -9,6 +9,7 @@ from aiogram.dispatcher import FSMContext
 from teach_bot.loader import dp
 from teach_bot.handlers.add_user import show_start_message
 from teach_bot.handlers.cancel_lesson import select_lesson
+from teach_bot.handlers.contact_teacher import write_message
 
 
 
@@ -42,13 +43,19 @@ async def check_callback(callback: CallbackQuery, state: FSMContext):
         case "button2":
             await select_lesson(callback.message, state=state)
         case "button3":
-            pass
+            await write_message(callback.message, state=state)
 
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
 
 
-# TODO порешать с записью пользователя в базу данных и выбор времени. Плюс,
-#  добавить функционал начать занова при вводе соответствующей команды и
-#  сбросе состояния.
+
+# TODO
+#    Надо сделать таску на автоматическое удаление записей на уроки,
+#    которые уже были проведены (то есть, из бд каждый понедельник удалять
+#    уроки на две недели назад).
+#    Добавить отправку ученикам раз в неделю сообщения в чат,
+#    чтобы не забывали записываться на занятия.
+#    Также, сделать еще одну таску, чтобы учителю в конце рабочего дня в
+#    20.00 приходило оповещение на почту с записями на урок на завтра.

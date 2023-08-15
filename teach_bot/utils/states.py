@@ -14,3 +14,8 @@ class LessonData(StatesGroup):
 class CancelLesson(StatesGroup):
     date_lsn = State()
     time_lsn = State()
+
+
+# Используется для хранения состояния набора данных при связи с преподавателем.
+class ContactTeacher(StatesGroup):
+    text_message = State()

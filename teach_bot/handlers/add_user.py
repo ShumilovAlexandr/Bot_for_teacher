@@ -1,5 +1,4 @@
 import datetime
-import json
 
 from aiogram.dispatcher import FSMContext
 from aiogram.types import (Message,
@@ -8,8 +7,8 @@ from aiogram.types import (Message,
                            CallbackQuery)
 from aiogram_calendar import (SimpleCalendar,
                               simple_cal_callback)
-from sqlalchemy import (insert,
-                        select)
+from sqlalchemy import insert
+from datetime import timedelta
 
 from teach_bot.utils.states import LessonData
 from ..loader import (dp,
@@ -46,15 +45,27 @@ async def select_date(callback_query: CallbackQuery,
         # (выбранная дата не задним числом).
         da = callback_data["year"]+'-'+callback_data["month"]+'-'+callback_data["day"]
         res = datetime.datetime.strptime(da, '%Y-%m-%d')
+
         # Проверяем приведенную строку с датой относительно текущей даты.
+        two_days = timedelta(days=1)
         if str(res) <= str(datetime.datetime.now()):
 
             # Если выбрана дата "задним" числом или текущая, посылаем в чат
-            # соответствующее сообщение и выводим снова клавиатуру.
+            # соответствующее сообщение и выводим снова календарь.
             await bot.send_message(callback_query.message.chat.id,
                                    "Дату урока и время надо бронировать заблаговременно. "
-                                   "Задним и сегодняшним числом это сделать "
+                                   "Задним числом это сделать "
                                    "не получится \U0000263A",
+                                   reply_markup=await SimpleCalendar().start_calendar())
+            return
+        elif str(res) < str(datetime.datetime.now() + two_days):
+            # Если выбрана дата "задним" числом или текущая, посылаем в чат
+            # соответствующее сообщение и выводим снова календарь.
+            await bot.send_message(callback_query.message.chat.id,
+                                   "Дату урока и время надо бронировать "
+                                   "минимум за 2 дня заранее. "
+                                   "Учителю нужно подготовиться к уроку "
+                                   "\U0000263A",
                                    reply_markup=await SimpleCalendar().start_calendar())
             return
         else:
@@ -80,7 +91,6 @@ async def select_date(callback_query: CallbackQuery,
                        "со временем \U000023F0", reply_markup=markup)
             await state.update_data(date_lesson=res)
             await state.set_state(LessonData.time)
-
 
 @dp.callback_query_handler(state=LessonData.time)
 async def select_time(callback_query: CallbackQuery, state: FSMContext):
@@ -111,4 +121,5 @@ async def select_time(callback_query: CallbackQuery, state: FSMContext):
     session.commit()
 
     # Сбрасываем состояние выбора пользователем.
-    await state.finish()
+    await state.reset_state()
+

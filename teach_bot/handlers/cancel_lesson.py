@@ -21,36 +21,32 @@ async def select_lesson(message: Message, state: FSMContext):
     lesson = session\
         .query(Timesheet.record_date)\
         .filter(Timesheet.user_id == message.chat.id)\
-        .all()
+        .distinct(Timesheet.record_date).all()
+
+    markup = InlineKeyboardMarkup(row_width=1)
 
     # Необходимо отформатировать выводимую из БД информацию
     formatted_dates = [date[0].strftime('%Y-%m-%d') for date in lesson]
-    markup = InlineKeyboardMarkup(row_width=1)
-
-
     if formatted_dates:
-        # Создаем кнопки с датами.
-        for less in formatted_dates:
-            buttons = InlineKeyboardButton(text=str(less),
-                                           callback_data = f'{less}')
-            markup.add(buttons)
-            # Сохраняем состояние действия пользователя.
-            await state.set_state(CancelLesson.date_lsn)
-            await bot.send_message(message.chat.id, "Жаль конечно \U0001F61E. "
-                                                    "Надеюсь, Вы просто решили "
-                                                    "перенести время. Выбери, в какой день "
-                                                    "Вы хотите отменить урок "
-                                                    "\U0001F4C5",
-                                   reply_markup=markup)
-    else:
+        for date in formatted_dates:
+            markup.add(InlineKeyboardButton(text=date, callback_data=date))
+
+        # Сохраняем состояние действия пользователя.
+        await state.set_state(CancelLesson.date_lsn)
+        await bot.send_message(message.chat.id, "Жаль конечно \U0001F61E. "
+                                                "Надеюсь, Вы просто решили "
+                                                "перенести время. Выбери, в какой день "
+                                                "Вы хотите отменить урок "
+                                                "\U0001F4C5",
+                               reply_markup=markup)
+    if not formatted_dates:
         await bot.send_message(message.chat.id, "У Вас нет забронированных "
                                                 "уроков, отменять нечего!")
         await state.reset_state()
 
 
-@dp.callback_query_handler(lambda callback: True, state=CancelLesson.date_lsn)
-async def select_time(callback: CallbackQuery, state: \
-    FSMContext):
+@dp.callback_query_handler(state=CancelLesson.date_lsn)
+async def select_time(callback: CallbackQuery, state: FSMContext):
     """
     Функция, отвечающая за вывод времени применимо к дате, в которые настоящий
     пользователь забронировал себе уроки.
@@ -73,23 +69,26 @@ async def select_time(callback: CallbackQuery, state: \
     await state.set_state(CancelLesson.time_lsn)
     await callback.message.answer(text="Теперь, выберите время, "
                                        "на которое у Вас забронирован "
-                                       f"урок",
+                                       "урок",
                                   reply_markup=markup)
 
-@dp.callback_query_handler(lambda callback: True, state=CancelLesson.time_lsn)
+
+@dp.callback_query_handler(state=CancelLesson.time_lsn)
 async def select_time(callback: CallbackQuery, state: \
                       FSMContext):
     """
     Функция, отвечающая за удаление урока из базы данных.
     """
     await state.update_data(time_lsn=callback.data)
-    data = await  state.get_data()
+    data = await state.get_data()
     date = data['date_lsn']
     time = data['time_lsn']
-    await callback.message.answer(text=f"Запись {date} на {time} отменена. "
-                                       f"Буду рады Вас видеть у меня на "
-                                       f"занятии! Возвращайтесь😍😍😍")
-    stmt = session\
+    await bot.send_message(callback.message.chat.id,
+                           text=f"Запись {date} на"
+                                f" {time} отменена. Буду рада "
+                                f"Вас видеть у меня на "
+                                f"занятии! Возвращайтесь😍😍😍")
+    session\
         .query(Timesheet) \
         .filter(Timesheet.record_date == date)\
         .filter(Timesheet.record_time == time)\

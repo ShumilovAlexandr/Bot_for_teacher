@@ -20,11 +20,3 @@ def check_records(date):
     available_times = [str(row[0]) for row in cur.fetchall()]
     cur.close()
     return available_times
-
-
-
-
-# select lesson_time from timelist except
-# select record_time from timesheet
-# where record_date = '2023-08-03'
-# order by lesson_time
