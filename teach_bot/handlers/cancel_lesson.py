@@ -4,11 +4,11 @@ from aiogram.types import (InlineKeyboardMarkup,
                            Message)
 from aiogram.dispatcher import FSMContext
 
-from ..database.databases import session
-from ..database.tables import Timesheet
-from ..utils.states import CancelLesson
-from ..loader import (dp,
-                      bot)
+from teach_bot.database.databases import session
+from teach_bot.database.tables import Timesheet
+from teach_bot.utils.states import CancelLesson
+from teach_bot.loader import (dp,
+                              bot)
 
 
 ### Функционал отмены забронированного урока.

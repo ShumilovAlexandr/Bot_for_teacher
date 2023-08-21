@@ -2,8 +2,8 @@ from aiogram.types import (Message,
                            ReplyKeyboardRemove)
 from aiogram.dispatcher import FSMContext
 
-from ..loader import (dp,
-                      bot)
+from teach_bot.loader import (dp,
+                              bot)
 
 
 ### Функционал сброса состояния.

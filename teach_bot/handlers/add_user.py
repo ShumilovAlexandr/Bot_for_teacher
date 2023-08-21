@@ -10,9 +10,9 @@ from aiogram_calendar import (SimpleCalendar,
 from sqlalchemy import insert
 from datetime import timedelta
 
-from teach_bot.utils.states import LessonData
+from ..utils.states import LessonData
 from ..loader import (dp,
-                      bot)
+                              bot)
 from ..database.database_query import check_records
 from ..database.databases import session
 from ..database.tables import (Timesheet,
