@@ -20,7 +20,7 @@ async def select_lesson(message: Message, state: FSMContext):
     """
     lesson = session\
         .query(Timesheet.record_date)\
-        .filter(Timesheet.user_id == message.chat.id)\
+        .filter(Timesheet.chat_id == message.chat.id)\
         .distinct(Timesheet.record_date).all()
 
     markup = InlineKeyboardMarkup(row_width=1)

@@ -113,7 +113,8 @@ async def select_time(callback_query: CallbackQuery, state: FSMContext):
         'record_date': date.date(),
         'record_time': callback_query.data,
         'fio': first_name + " " + second_name,
-        'user_id': callback_query.from_user.id
+        'user_id': callback_query.message.from_user.id,
+        "chat_id": callback_query.message.chat.id
     }
     # Сохранение данных ученика в БД.
     stmt = insert(Timesheet).values(data)

@@ -3,6 +3,7 @@ from sqlalchemy import (Table,
                         MetaData,
                         Column,
                         Integer,
+                        BigInteger,
                         String,
                         DateTime, TIME)
 
@@ -15,7 +16,8 @@ class Timesheet(Base):
     record_date = Column(DateTime)
     record_time = Column(TIME)
     fio = Column(String)
-    user_id = Column(Integer, primary_key=True, unique=True)
+    chat_id = Column(Integer, primary_key=True, unique=True)
+    user_id = Column(BigInteger)
 
 
 class Timelist(Base):
